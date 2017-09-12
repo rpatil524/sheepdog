@@ -199,33 +199,18 @@ class UploadEntity(EntityBase):
         Return:
             psqlgraph.Node:
         """
-        nodes = lookup_node(
-            self.transaction.db_driver,
-            self.entity_type,
-            self.entity_id,
-            self.secondary_keys
-        ).all()
+        try:
+            node = lookup_node(
+                self.transaction.db_driver,
+                self.entity_type,
+                self.entity_id,
+                self.secondary_keys
+            ).one()
+        except sqlalchemy.orm.exc.NoResultFound:
+            # If no node was found, create a new one. (Skip the node lookup,
+            # because it just failed already.)
+            return self._get_node_create(skip_node_lookup=True)
 
-        if len(nodes) > 1:
-            return self.record_error(
-                'Entity is not unique, {} entities found with {}'
-                .format(len(nodes), self.secondary_keys),
-                type=EntityErrors.NOT_UNIQUE,
-            )
-
-        # If no node was found, create a new one
-        if len(nodes) == 0:
-            return self._get_node_create()
-
-        # Check user permissions for updating nodes
-        if 'update' not in self.get_user_roles():
-            return self.record_error(
-                'You do not have update permission for project {}'
-                .format(self.transaction.project_id),
-                type=EntityErrors.INVALID_PERMISSIONS,
-            )
-
-        node = nodes.pop()
         self.old_props = {k: v for k, v in node.props.iteritems()}
 
         if node.label != self.entity_type:
@@ -253,12 +238,14 @@ class UploadEntity(EntityBase):
 
         # If the node is a data_file, verify that update is allowed
         if self.is_file(node) and not self.is_updatable_file(node):
+            msg = (
+                "This file is already in file_state '{}' and cannot be"
+                " updated. The raw data exists in the GDC file storage;"
+                " modifying the Entity now is unsafe and may cause problems"
+                " for any processes or users consuming this data."
+            )
             self.record_error(
-                ("This file is already in file_state '{}' and cannot be "
-                 "updated. The raw data exists in the GDC file storage "
-                 "and modifying the Entity now is unsafe and may cause "
-                 "problems for any processes or users consuming "
-                 "this data.").format(node._props.get('file_state')),
+                msg.format(node._props.get('file_state')),
                 keys=['file_state'],
                 type=EntityErrors.INVALID_PERMISSIONS,
             )
@@ -530,9 +517,7 @@ class UploadEntity(EntityBase):
             self.record_error(str(e))
 
     def get_skeleton_node(self, label, properties, project_id=None):
-        """Return a node with just the properties set
-
-        """
+        """Return a node with just the properties set."""
         # Get node class
         cls = psqlgraph.Node.get_subclass(label)
         if not cls:

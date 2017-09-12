@@ -103,17 +103,20 @@ class AuthDriver(object):
                         .format(node.node_id, node.project_id)
                     )
 
-                # for general users with '_member_' role, allow
-                # download if project is released and file is submitted
-                # and file_state is at or after "submitted"
+                # For general users with '_member_' role, allow download if
+                # project is released and file is submitted and file_state is
+                # at or after "submitted".
                 allow_general_access = (
-                    project.released is True and
-                    state == 'submitted' and
-                    file_state in MEMBER_DOWNLOADABLE_STATES)
+                    project.released
+                    and state == 'submitted'
+                    and file_state in MEMBER_DOWNLOADABLE_STATES
+                )
 
-                # for submitters with "download" role, allow download
-                # if file_state is at or after "uploaded"
-                allow_submitter_access = file_state in SUBMITTER_DOWNLOADABLE_STATES
+                # For submitters with "download" role, allow download if
+                # file_state is at or after "uploaded".
+                allow_submitter_access = (
+                    file_state in SUBMITTER_DOWNLOADABLE_STATES
+                )
 
                 if allow_general_access:
                     return ROLES['GENERAL']
@@ -123,8 +126,8 @@ class AuthDriver(object):
 
                 else:
                     raise NotFoundError(
-                        "Data with id {} not found"
-                        .format(node.node_id))
+                        'Data with id {} not found'.format(node.node_id)
+                    )
 
         else:
             # node does not have project_id and is not live
