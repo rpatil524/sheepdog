@@ -1,0 +1,107 @@
+$schema: "http://json-schema.org/draft-04/schema#"
+
+id: "foo"
+title: Foo
+type: object
+namespace: http://bloodprofilingatlas.org/bpa/
+category: administrative
+program: '*'
+project: '*'
+description: >
+  A coordinated set of actions and observations designed to generate data, with the ultimate goal
+  of discovery or hypothesis testing.
+additionalProperties: false
+submittable: true
+validators: null
+
+systemProperties:
+  - id
+  - project_id
+  - created_datetime
+  - updated_datetime
+  - state
+
+links:
+  - name: projects
+    backref: foos
+    label: performed_for
+    target_type: project 
+    multiplicity: many_to_one
+    required: true
+
+required:
+  - submitter_id
+  - projects
+
+uniqueKeys:
+  - [ id ]
+  - [ project_id, submitter_id ]
+
+properties:
+  type:
+    enum: [ "foo" ]
+  id:
+    $ref: "_definitions.yaml#/UUID"
+    systemAlias: node_id
+  state:
+    $ref: "_definitions.yaml#/state"
+  submitter_id:
+    type:
+      - string
+      - "null"
+  number_fooing_group:
+    description: "The number denoting this foo's place within the group within the whole."
+    type:
+      - integer
+  number_samples_per_fooing_group:
+    description: "The number of samples contained within this fooing group."
+    type:
+      - integer
+  fooing_description:
+    description: "A brief description of the foo being performed."
+    type:
+      - string
+  fooing_intent:
+    description: "Summary of the goals the foo is designed to discover."
+    type:
+      - string
+  associated_foo:
+    description: "The submitter_id for any foo with which this foo is associated, paired, or matched."
+    type:
+      - string
+  type_of_sample:
+    description: "String indicator identifying the types of samples as contrived or clinical."
+    type:
+      - string
+  type_of_specimen:
+    description: "Broad description of the specimens used in the foo."
+    type:
+      - string
+  marker_panel_description:
+    description: "Brief description of the marker panel used in this foo."
+    type: string
+  somatic_mutations_identified:
+    description: "Are somatic mutations identified for this foo?"
+    type: boolean
+  indels_identified:
+    description: "Are indels identified in this foo?"
+    type: boolean
+  copy_numbers_identified:
+    description: "Are copy number variations identified in this foo?"
+    type: boolean
+  type_of_data:
+    description: "Is the data raw or processed?"
+    enum:
+      - Raw
+      - Processed
+  data_description:
+    description: "Brief description of the data being provided for this foo."
+    type: string
+  projects:
+    $ref: "_definitions.yaml#/to_one"
+  project_id:
+    $ref: "_definitions.yaml#/project_id"
+  created_datetime:
+    $ref: "_definitions.yaml#/datetime"
+  updated_datetime:
+    $ref: "_definitions.yaml#/datetime"
