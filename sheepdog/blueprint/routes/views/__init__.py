@@ -6,13 +6,13 @@ import uuid
 
 import flask
 from flask import current_app
-import requests
 
 from sheepdog import auth
 from sheepdog import dictionary
 from sheepdog import models
 from sheepdog import utils
 from sheepdog.blueprint.routes.views import program
+from sheepdog.blueprint.routes.views.program import project
 from sheepdog.errors import (
     AuthError,
     NotFoundError,

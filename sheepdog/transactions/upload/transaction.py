@@ -6,6 +6,7 @@ from collections import Counter
 
 from gdcdatamodel import validators
 import graphene
+import psqlgraph
 from sqlalchemy.orm.attributes import flag_modified
 
 from sheepdog import models
@@ -65,6 +66,30 @@ class UploadTransaction(TransactionBase):
         #: HTTP[S] proxies used for requests to external services
         self.external_proxies = kwargs.pop('external_proxies', {})
 
+    def add_entity(self, doc):
+        """
+        Add an entity to the transaction.
+
+        Args:
+            doc (dict):
+                A dictionary (JSON) containing the data from which to generate
+                the entity
+
+        Return:
+            None
+
+        Side Effects:
+            - Add the parsed entity to the transaction.
+            - If the entity does not parse correctly, catch the exception and
+              log the error.
+        """
+        try:
+            entity = UploadEntity(self, doc)
+            self.entities.append(entity)
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.exception(e)
+            self.record_error('Unable to parse entity')
+
     def get_phsids(self):
         """Fetch the phsids for the current project."""
         project = utils.lookup_project(
@@ -98,7 +123,7 @@ class UploadTransaction(TransactionBase):
         Return:
             None
         """
-        if isinstance(docs, dict):
+        if not isinstance(docs, list):
             docs = [docs]
         for doc in docs:
             self.add_entity(doc)
@@ -112,18 +137,10 @@ class UploadTransaction(TransactionBase):
         self.instantiate()
         self.pre_validate()
 
-    def fetch_transaction_log_documents(self):
-        """Returns a list of documents from a bulk transaction"""
-
-        with self.fetch_transaction_log() as tx_log:
-            return tx_log.documents
-
-    def specify_errors(self):
-        """
-        Parse the error (type, message, etc) for errors may not have been
-        classified with an ERROR_TYPE.
-        """
-        return [entity.specify_errors() for entity in self.entities]
+    def instantiate(self):
+        """Create a SQLAlchemy model for all transaction entities."""
+        for entity in self.valid_entities:
+            entity.instantiate()
 
     def pre_validate(self):
         """
@@ -148,6 +165,18 @@ class UploadTransaction(TransactionBase):
         self.json_validator.record_errors(self.entities)
         self.specify_errors()
 
+    def fetch_transaction_log_documents(self):
+        """Return a list of documents from a bulk transaction."""
+        with self.fetch_transaction_log() as tx_log:
+            return tx_log.documents
+
+    def specify_errors(self):
+        """
+        Parse the error (type, message, etc) for errors may not have been
+        classified with an ERROR_TYPE.
+        """
+        return [entity.specify_errors() for entity in self.entities]
+
     def post_validate(self):
         """
         Handle graph linking and validation. Should be called after
@@ -156,11 +185,6 @@ class UploadTransaction(TransactionBase):
         self.create_links()
         self.graph_validator.record_errors(self.db_driver, self.valid_entities)
         self.specify_errors()
-
-    def instantiate(self):
-        """Create a SQLAlchemy model for all transaction entities."""
-        for entity in self.valid_entities:
-            entity.instantiate()
 
     def create_links(self):
         """Construct edges between all transaction entities."""
@@ -181,6 +205,20 @@ class UploadTransaction(TransactionBase):
         for entity in self.valid_entities:
             entity.flush_to_session()
         self.session.flush()
+
+    def lookup_node(self, entity_type, entity_id, secondary_keys):
+        """
+        TODO: Docstring for lookup_node.
+
+        Args:
+            entity_type (TODO): TODO
+            entity_id (TODO): TODO
+            secondary_keys (TODO): TODO
+
+        Return:
+            TODO
+        """
+        pass
 
     @property
     def status_code(self):
@@ -260,26 +298,6 @@ class UploadTransaction(TransactionBase):
         if not self.success:
             return 0
         return len([e for e in self.entities if e.action == 'update'])
-
-    def add_entity(self, doc):
-        """
-        Add an entity to the transaction.
-
-        Args:
-            doc (dict):
-                A dictionary (JSON) containing the data from which to generate
-                the entity
-
-        Return:
-            None
-        """
-        try:
-            entity = UploadEntity(self)
-            self.entities.append(entity)
-            entity.parse(doc)
-        except Exception as e:  # pylint: disable=broad-except
-            self.logger.exception(e)
-            self.record_error('Unable to parse entity')
 
 
 class BulkUploadTransaction(TransactionBase):

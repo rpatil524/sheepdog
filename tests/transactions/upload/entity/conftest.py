@@ -1,65 +1,107 @@
-# pylint: disable=redefined-outer-name
 """
-Create fixtures and utility functions for UploadEntity tests.
+Create pytest fixtures for UploadEntity tests.
 """
-
-import logging
-import uuid
 
 import mock
-import psqlgraph
 import pytest
 
-from sheepdog.transactions import upload
-from sheepdog.transactions.upload.entity import UploadEntity
+from sheepdog.transactions.entity_base import EntityErrors
 
 from tests.models import models
+from tests.transactions.upload import utils
 
 
-ENTITY_PATH = 'sheepdog.transactions.upload.entity'
-ENTITY_NAME = 'sheepdog.transactions.upload.entity.UploadEntity'
-
-
-def patch_entity_method(monkeypatch, method_name, new_method):
+@pytest.fixture
+def patch_entity_method(monkeypatch):
     """
-    Monkeypatch an ``UploadEntity`` method.
-
-    Args:
-        monkeypatch: the monkeypatch instance (from pytest)
-        method_name (str): name of the method to patch
-        new_method (Callable):
-            function to patch over the method with; assume that it will have
-            the same signature as the original method
+    Provide a function which patches an ``UploadEntity`` method to use a
+    different function. If the patch is used without specifying a new function
+    to use, default to a ``mock.MagicMock``.
 
     Return:
-        None
-
-    Side Effects:
-        Monkeypatch the given ``UploadEntity`` method to use the new function.
+        Callable: function to monkeypatch an UploadEntity method
     """
-    monkeypatch.setattr(ENTITY_NAME + '.' + method_name, new_method)
-    return
+
+    def apply_patch(method_name, new_method=None):
+        """
+        Monkeypatch an ``UploadEntity`` method.
+
+        Args:
+            monkeypatch: the monkeypatch instance (from pytest)
+            method_name (str): name of the method to patch
+            new_method (Callable):
+                function to patch over the method with; defaults to
+                ``mock.MagicMock``
+
+        Return:
+            None
+
+        Side Effects:
+            - Patch the ``UploadEntity`` method.
+        """
+        new_method = new_method or mock.MagicMock(name=method_name)
+        monkeypatch.setattr(utils.ENTITY_NAME + '.' + method_name, new_method)
+
+    return apply_patch
 
 
-def make_new_entity(entity_type='foo', transaction_role='create'):
+@pytest.fixture
+def entity():
     """
-    Produce a new ``UploadEntity`` that has been initialized with
-    ``UploadEntity.parse`` using the given entity type.
-
-    Args:
-        entity_type (TODO):
-            the type to give to the new entity; using examples from the GDC
-            data model, this could be 'Experiment' or 'Case'
+    Provide a basic default ``UploadEntity`` instance test fixture.
 
     Return:
-        UploadEntity: the new entity with given type
+        UploadEntity
     """
-    new_transaction = transaction()
-    new_transaction.role = transaction_role
-    new_entity = entity(new_transaction)
-    doc = {'type': entity_type, 'id': str(uuid.uuid4())}
-    new_entity.parse(doc)
+    return utils.make_new_entity()
+
+
+@pytest.fixture
+def transaction():
+    """
+    Provide a default ``mock.MagicMock`` of an ``UploadTransaction``.
+
+    Return:
+        mock.MagicMock
+    """
+    return utils.make_mock_transaction()
+
+
+@pytest.fixture
+def entity_with_error():
+    """
+    Provide a basic ``UploadEntity`` which has already recorded a generic
+    error.
+
+    Return:
+        UploadEntity
+    """
+    new_entity = utils.make_new_entity()
+    new_entity.record_error('test error', type=EntityErrors.UNCATEGORIZED)
     return new_entity
+
+
+@pytest.fixture
+def mock_lookup_node(monkeypatch):
+    """
+    Return a function that allows for monkeypatching of ``lookup_node``.
+
+    Args:
+        monkeypatch: the monkeypatch fixture from pytest
+
+    Return:
+        Callable:
+            a function that takes an arbitrary return value, and mocks
+            ``lookup_node`` to return that value instead
+    """
+
+    def set_lookup_node_return_value(return_value):
+        mocked_lookup_node = mock.MagicMock(return_value=return_value)
+        monkeypatch.setattr(
+            utils.ENTITY_PATH + '.lookup_node', mocked_lookup_node
+        )
+
+    return set_lookup_node_return_value
 
 
 @pytest.fixture(autouse=True)
@@ -97,79 +139,27 @@ def mock_get_subclass(monkeypatch):
 
 
 @pytest.fixture
-def set_user_roles_none(monkeypatch):
+def set_user_roles_none(patch_entity_method):
     """
     Cause ``UploadEntity.get_user_roles`` to return ``[]``.
     """
-    allow_none = lambda _: []  # noqa
-    patch_entity_method(monkeypatch, 'get_user_roles', allow_none)
+    patch_entity_method('get_user_roles', lambda _: [])
     return
 
 
 @pytest.fixture
-def set_user_roles_create(monkeypatch):
+def set_user_roles_create(patch_entity_method):
     """
     Cause ``UploadEntity.get_user_roles`` to return ``['create']``.
     """
-    allow_create = lambda _: ['create']  # noqa
-    patch_entity_method(monkeypatch, 'get_user_roles', allow_create)
+    patch_entity_method('get_user_roles', lambda _: ['create'])
     return
 
 
 @pytest.fixture
-def set_user_roles_create_update(monkeypatch):
+def set_user_roles_create_update(patch_entity_method):
     """
     Cause ``UploadEntity.get_user_roles`` to return ``['create', 'update']``.
     """
-    allow_create_update = lambda _: ['create', 'update']  # noqa
-    patch_entity_method(monkeypatch, 'get_user_roles', allow_create_update)
+    patch_entity_method('get_user_roles', lambda _: ['create', 'update'])
     return
-
-
-@pytest.fixture
-def transaction():
-    """
-    Return a mocked UploadTransaction instance.
-
-    Return:
-        mock.mock.MagicMock: a magic mock of an UploadTransaction
-    """
-    result = mock.create_autospec(upload.transaction.UploadTransaction)
-    result.project_id = 'program-project'
-    result.logger = logging.getLogger('UploadTransaction')
-    result.db_driver = None
-    result.signpost = None
-    return result
-
-
-@pytest.fixture
-def entity(transaction):
-    """
-    Return a basic UploadEntity instance.
-
-    Note that the UploadTransaction for this entity is mocked (see
-    ``transaction``).
-
-    Return:
-        UploadEntity
-    """
-    result = UploadEntity(transaction)
-    return result
-
-
-# Use the ``pytest_generate_tests`` hook to set the parametrization. Here, set
-# the ``every_entity`` parametrization to use all the entity test bars we want
-# to run, so every test that uses the ``every_entity`` fixture will be called
-# once with each entity in ``all_test_entities``.
-def pytest_generate_tests(metafunc):
-    """
-    Define pytest hook to run when collecting a test function.
-    """
-    # Define the list of entities that will be used for testing.
-    all_test_entities = [
-        make_new_entity('foo'),
-        make_new_entity('bar'),
-    ]
-
-    if 'every_entity' in metafunc.fixturenames:
-        metafunc.parametrize('every_entity', all_test_entities)

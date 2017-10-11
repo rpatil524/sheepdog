@@ -21,7 +21,18 @@ from sheepdog.utils import get_suggestion
 
 
 def lookup_node(psql_driver, label, node_id=None, secondary_keys=None):
-    """Return a query for nodes by id and secondary keys."""
+    """
+    Return a query for nodes by id and secondary keys.
+
+    Args:
+        psql_driver: TODO
+        label: TODO
+        node_id: TODO
+        secondary_keys: TODO
+
+    Return:
+        TODO
+    """
     cls = psqlgraph.Node.get_subclass(label)
     query = psql_driver.nodes(cls)
     if node_id is None and not secondary_keys:
@@ -35,8 +46,9 @@ def lookup_node(psql_driver, label, node_id=None, secondary_keys=None):
 
 class UploadEntity(EntityBase):
     """
-    An `UploadEntity` is any biospecimen, file, admin, etc. entity to be owned by
-    an :ref:``UploadTransaction`` to encapsulate validation and model creation.
+    An `UploadEntity` is any biospecimen, file, admin, etc. entity to be owned
+    by an :ref:``UploadTransaction`` to encapsulate validation and model
+    creation.
 
     The lifespan of a UploadEntity should include:
        #. parse
@@ -44,85 +56,286 @@ class UploadEntity(EntityBase):
        #. instantiate
        #. post_validate
 
+    Parsing the input document is handled in the ``__init__``, while the pre-
+    and post-validation stages are handled by the ``UploadTransaction`` to
+    which this entity belongs.
+
     These steps should call any validators specified by the data dictionary and
     create a node. After this, it should be flushed into a UploadTransaction's
     session.
+
+    Attributes:
+        _secondary_keys (): TODO
+        action (str): str describing the action to be taken for this entity
+        base_json (dict): TODO
+        category (str):
+            the category in the dictionary schema that the node for this entity
+            belongs to (e.g. 'administrative', 'data_file', 'metadata_file')
+        cls:
+            a class from the datamodel, e.g. `gdcdatamodel.models.Experiment`,
+            which is a subclass of ``psqlgraph.Node`` corresponding to the type
+            of this entity
+        doc (dict): the entity document in dictionary form
+        entity_id (str): the entity uuid str
+        entity_type (): the name of the entity type (e.g. 'experiment')
+        errors (List[dict]):
+            list of error messages (empty if no errors have occurred yet)
+        is_valid (bool):
+            property implemented by ``EntityBase``, returns ``not
+            self.errors``.
+        json (dict): TODO
+        logger (flask.logging.DebugLogger): the logger to output to
+        node (): TODO
+        node_exists (bool): TODO
+        old_props (dict): TODO
+        parents (dict): TODO
+        pg_secondary_keys (): TODO
+        related_cases (): TODO
+        secondary_keys (): TODO
+        secondary_keys_dicts (List[dict]): TODO
+        warnings (): TODO
     """
 
-    def __init__(self, transaction):
+    def __init__(self, transaction, doc):
         """
         Args:
             transaction (UploadTransaction): the associated transaction
+            doc (dict):
+                the entity document in dictionary form; should contain
+                at least a ``'type'`` field specifying the type for this entity
         """
         super(UploadEntity, self).__init__(transaction)
-        self.doc = {}
         self.parents = {}
+        # Cache for the property ``self.secondary_keys``.
         self._secondary_keys = None
 
-    @property
-    def secondary_keys(self):
-        """Return the tuple of unique dicts for the node."""
-        if self._secondary_keys is None:
-            node = (
-                self.node
-                or self.get_skeleton_node(self.entity_type, self.doc)
+        # The assignment of all the attributes in this section depend on having
+        # received appropriate inputs for the type, id, etc.
+        self.doc = None
+        self.entity_type = None
+        # It is normal if ``self.entity_id`` is not assigned to; in fact, it
+        # should remain ``None`` if this entity is a data file being created.
+        self.entity_id = None
+        self.cls = None
+        self.category = None
+        # ``self.parse(doc)`` will assign to all the above attributes if
+        # everything goes as expected.
+        self.parse(doc)
+
+    def parse(self, doc):
+        """
+        Parse the input document for this entity into the necessary attributes
+        for this UploadEntity instance.
+
+        Args:
+            doc (dict): the entity document in dictionary form
+
+        Return:
+            None
+
+        Side Effects:
+            - Assign to ``self.doc`` the input document (if valid)
+            - Assign to ``self.entity_type`` the type from the document
+            - Assign to ``self.entity_id`` the id from the document
+            - Assign to ``self.cls`` the Node subclass according to the type
+            - Assign to ``self.category`` the category for this node from the
+              schema
+            - Record errors using ``self.record_error`` if any steps fail.
+        """
+        if not self._check_valid_doc(doc):
+            return
+        self.doc = doc
+        self.entity_type = self.doc['type']
+        cls = psqlgraph.Node.get_subclass(self.entity_type)
+        if not self._check_valid_cls(cls):
+            return
+        self.cls = cls
+        self.category = dictionary.schema.get(self.cls.label)['category']
+        self.entity_id = self.doc.get('id')
+        self._check_valid_id(self.entity_id)
+
+    def _check_valid_doc(self, doc):
+        """
+        Check an input document for validity.
+
+        Args:
+            doc (dict): the input dictionary for this entity
+
+        Return:
+            bool: whether the doc is valid
+
+        Side Effects:
+            - Record error if doc is invalid.
+        """
+        if not isinstance(doc, dict):
+            name = doc.__class__.__name__
+            msg = 'Entity document must be an object, not a {}'.format(name)
+            self.record_error(msg, type=EntityErrors.INVALID_VALUE)
+            return False
+        if 'type' not in doc or not doc['type']:
+            self.record_error(
+                "missing 'type'", keys=["type"], type=EntityErrors.INVALID_TYPE
             )
-            if node:
-                self._secondary_keys = node._secondary_keys
+            return False
+        return True
+
+    def _check_valid_cls(self, cls):
+        """
+        Check that the Node subclass (which should be derived from the entity
+        type in the input document) is valid, i.e. has valid type and can be
+        uploaded via project endpoint.
+
+        Return:
+            bool: whether the class is valid
+
+        Side Effects:
+            - Record error if class is invalid.
+        """
+        if not cls:
+            suggestion = get_suggestion(
+                self.entity_type,
+                [n.label for n in psqlgraph.Node.get_subclasses()]
+            )
+            msg = 'Invalid entity type: {}.{}'
+            self.record_error(
+                msg.format(self.entity_type, suggestion), keys=['type'],
+                type=EntityErrors.INVALID_TYPE
+            )
+            return False
+        if 'project_id' not in cls.get_pg_properties():
+            msg = '{} cannot be upload via the project endpoint.'
+            self.record_error(
+                msg.format(cls.label), keys=['id'],
+                type=EntityErrors.INVALID_TYPE
+            )
+            return False
+        return True
+
+    def _check_valid_id(self, entity_id):
+        """
+        Check that, if the transaction role is ``'create'``, that ``entity_id``
+        is a valid UUID.
+
+        Return:
+            bool: whether id is valid
+
+        Side Effects:
+            - Record error if id is invalid.
+        """
+        not_uuid = (
+            self.transaction.role == 'create'
+            and entity_id
+            and not REGEX_UUID.match(entity_id)
+        )
+        if not_uuid:
+            self.record_error(
+                'Cannot create entity with custom id that is not a UUID.',
+                keys=['id'], type=EntityErrors.INVALID_VALUE
+            )
+            return False
+        return True
+
+    def instantiate(self):
+        """
+        Instantiate the node for this entity.
+
+        Return:
+            None
+
+        Side Effects:
+            - TODO
+        """
+        if not self.is_valid or not self._check_for_identifier():
+            return
+
+        if self.transaction.role == 'create':
+            self.node = self._get_node_create()
+        elif self.transaction.role == 'update':
+            self.node = self._get_node_merge()
+        else:
+            self.record_error(
+                "Unknown role '{}'".format(self.transaction.role),
+                type=EntityErrors.INVALID_PERMISSIONS,
+            )
+            return
+
+        # Stop if the node instantiation failed.
+        if not self.node:
+            return
+
+        self._set_node_properties()
+
+    def _check_for_identifier(self):
+        """
+        Check that this entity has an identifier (either uuid or unique
+        secondary keys).
+
+        Return:
+            bool: whether entity has valid identifier
+        """
+        if not (self.entity_id or self.secondary_keys):
+            keys = [a for b in self.pg_secondary_keys for a in b]
+            if not keys:
+                self.record_error(
+                    ('There are no unique keys defined on type {} except'
+                     ' for the official GDC id.  To upload this entity you'
+                     ' must add a UUID').format(self.entity_type),
+                    keys=['id'],
+                    type=EntityErrors.MISSING_PROPERTY,
+                )
+                return False
             else:
-                self._secondary_keys = tuple()
-        return self._secondary_keys
+                self.record_error(
+                    'Either an id or required unique fields ({}) required'
+                    .format(', '.join(list(keys))),
+                    keys=keys,
+                    type=EntityErrors.MISSING_PROPERTY,
+                )
+                return False
+        return True
 
-    @property
-    def secondary_keys_dicts(self):
-        """Return the list of unique tuples for the node."""
-        node = self.node or self.get_skeleton_node(self.entity_type, self.doc)
-        return [] if not node else node._secondary_keys_dicts
-
-    @property
-    def pg_secondary_keys(self):
-        """Return the list of unique tuples for the node type"""
-
-        node = self.node or self.get_skeleton_node(self.entity_type, self.doc)
-        return [] if not node else node.__pg_secondary_keys
-
-    @staticmethod
-    def is_file(node):
+    def _check_can_create_node(self, skip_node_lookup=False):
         """
-        Check if the API should treat this node as a file-like object.
-
-        Args:
-            node (psqlgraph.Node):
+        TODO: Docstring for _check_can_create_node.
 
         Return:
-            bool
+            TODO
         """
-        is_category_data_file = node._dictionary['category'] == 'data_file'
-        has_file_state = 'file_state' in node.__pg_properties__
-        return is_category_data_file and has_file_state
-
-    @staticmethod
-    def is_updatable_file(node):
-        """
-        Check that a node is a file that can be updated. True if:
-
-        #. The node is a data_file
-        #. It has a file_state in the list of states below
-
-        Args:
-            node (psqlgraph.Node):
-
-        Return:
-            bool: whether the node is an updatable file
-        """
-        allowed_states = [
-            'registered',
-            'uploading',
-            'uploaded',
-            'validating',
-        ]
-        file_state = node._props.get('file_state')
-        return UploadEntity.is_file(node) and file_state in allowed_states
+        # Check user has permission to create nodes in this project.
+        roles = self.get_user_roles()
+        if 'create' not in roles:
+            self.record_error(
+                'You do not have create permission for project {} only {}'
+                .format(self.transaction.project_id, roles),
+                type=EntityErrors.INVALID_PERMISSIONS,
+            )
+            return False
+        # Check that the node doesn't already exist.
+        if not skip_node_lookup:
+            nodes = lookup_node(
+                self.transaction.db_driver,
+                self.entity_type,
+                self.entity_id,
+                self.secondary_keys,
+            )
+            if nodes.count():
+                self.record_error(
+                    'Cannot create entity that already exists.'
+                    ' Try updating entity (PUT instead of POST)',
+                    keys=['id'],
+                    type=EntityErrors.NOT_UNIQUE,
+                )
+                return False
+        # Create the node and populate its properties.
+        if self.category == 'data_file':
+            if self.entity_id:
+                self.record_error(
+                    'Cannot assign ID to file, these are system generated.',
+                    keys=['id'],
+                    type=EntityErrors.INVALID_VALUE,
+                )
+                return False
+        return True
 
     def _get_node_create(self, skip_node_lookup=False):
         """
@@ -136,55 +349,19 @@ class UploadEntity(EntityBase):
         Return:
             psqlgraph.Node
         """
-        # Check user permissions for updating nodes
-        roles = self.get_user_roles()
-        if 'create' not in roles:
-            return self.record_error(
-                'You do not have create permission for project {} only {}'
-                .format(self.transaction.project_id, roles),
-                type=EntityErrors.INVALID_PERMISSIONS,
-            )
-
-        # Assert that the node doesn't already exist
-        if not skip_node_lookup:
-            nodes = lookup_node(
-                self.transaction.db_driver,
-                self.entity_type,
-                self.entity_id,
-                self.secondary_keys,
-            )
-
-            if nodes.count():
-                return self.record_error(
-                    'Cannot create entity that already exists. '
-                    'Try updating entity (PUT instead of POST)',
-                    keys=['id'],
-                    type=EntityErrors.NOT_UNIQUE,
-                )
-
-        # Create the node and populate its properties
-        cls = psqlgraph.Node.get_subclass(self.entity_type)
-        self.logger.debug('Creating new {}'.format(cls.__name__))
-        category = dictionary.schema.get(cls.label)['category']
-        is_data_file = category == 'data_file'
-        if is_data_file:
-            if self.entity_id:
-                self.record_error(
-                    'Cannot assign ID to file, these are system generated. ',
-                    keys=['id'],
-                    type=EntityErrors.INVALID_VALUE,
-                )
+        if not self._check_can_create_node(skip_node_lookup=skip_node_lookup):
+            return None
 
         if not self.entity_id:
             self.entity_id = str(uuid.uuid4())
 
         # Fill in default system property values
         for key, val in self.get_system_property_defaults().iteritems():
-            if self.doc.get(key, None) is None:
+            if self.doc.get(key) is None:
                 self.doc[key] = val
 
-        node = cls(self.entity_id)
-        if is_data_file:
+        node = self.cls(self.entity_id)
+        if self.category == 'data_file':
             node.acl = self.transaction.get_phsids()
 
         self.action = 'create'
@@ -217,51 +394,56 @@ class UploadEntity(EntityBase):
         if len(nodes) == 0:
             return self._get_node_create()
 
+        node = nodes.pop()
+        self.old_props = {k: v for k, v in node.props.iteritems()}
+
         # Check user permissions for updating nodes
         if 'update' not in self.get_user_roles():
-            return self.record_error(
+            self.record_error(
                 'You do not have update permission for project {}'
                 .format(self.transaction.project_id),
                 type=EntityErrors.INVALID_PERMISSIONS,
             )
-
-        node = nodes.pop()
-        self.old_props = {k: v for k, v in node.props.iteritems()}
-
+            return
+        # Verify that existing node label matches this entity type.
         if node.label != self.entity_type:
-            return self.record_error(
+            self.record_error(
                 'Existing {} entity found with type different from {}'
                 .format(node.label, self.entity_type),
                 type=EntityErrors.NOT_UNIQUE,
             )
-
-        # Verify that the node is in the correct project
-        if not self._verify_node_project_id(node):
+            return
+        # Verify that the node is in the correct project.
+        if node.project_id != self.transaction.project_id:
             self.record_error(
                 "Entity is owned by project {}, not {}"
                 .format(node.project_id, self.transaction.project_id),
                 type=EntityErrors.INVALID_PERMISSIONS,
             )
+            return
+
         self._merge_doc_links(node)
 
         if self.entity_id and node.node_id != self.entity_id:
-            return self.record_error(
+            self.record_error(
                 'Existing {} entity found with id different from {}'
                 .format(node, self.entity_id),
                 type=EntityErrors.NOT_UNIQUE,
             )
-
+            return
         # If the node is a data_file, verify that update is allowed
         if self.is_file(node) and not self.is_updatable_file(node):
+            msg = (
+                "This file is already in file_state '{}' and cannot be"
+                " updated; modifying the Entity now is unsafe and may cause"
+                " problems for any processes or users consuming this data."
+            )
             self.record_error(
-                ("This file is already in file_state '{}' and cannot be "
-                 "updated. The raw data exists in the GDC file storage "
-                 "and modifying the Entity now is unsafe and may cause "
-                 "problems for any processes or users consuming "
-                 "this data.").format(node._props.get('file_state')),
+                msg.format(node._props.get('file_state')),
                 keys=['file_state'],
                 type=EntityErrors.INVALID_PERMISSIONS,
             )
+            return
 
         # Since we are updating the node, we have to set its state to
         # ``validated``.  This means that this version of the node has
@@ -290,6 +472,135 @@ class UploadEntity(EntityBase):
 
         return node
 
+    def _set_node_properties(self):
+        """
+        Take the key, values from the dictionary (minus system keys) and set
+        the value on the instances node, recording any errors.
+        """
+        self.logger.debug('Setting properties on {}'.format(self.node))
+        entry = dictionary.schema.get(self.node.label, {})
+        systemProperties = set(entry.get('systemProperties', []))
+        special_keys = ['type', 'id', 'created_datetime', 'updated_datetime']
+        pg_props = self.node.get_pg_properties()
+        prop_keys = (
+            pg_props.keys()
+            + self.node._pg_links.keys()
+            + special_keys
+        )
+        self.node.project_id = self.transaction.project_id
+        default_props = self.get_system_property_defaults()
+
+        # Set properties
+        for key, val in self.doc.iteritems():
+            # Does this key exist?
+            if key not in prop_keys:
+                msg = (
+                    "Key '{}' is not a valid property for type '{}'.{}"
+                    .format(
+                        key, self.entity_type, get_suggestion(key, prop_keys)
+                    ),
+                )
+                self.record_error(
+                    msg, keys=[key], type=EntityErrors.INVALID_PROPERTY
+                )
+            # Skip type and id
+            elif key in special_keys:
+                pass
+            # If key is a link, skip for now
+            elif key in self.node._pg_links.keys():
+                pass
+            # Is it a system property?
+            elif key in systemProperties:
+                # If the property isn't set on the node, set the default
+                if self.node._props.get(key) is None:
+                    default = default_props.get(key)
+                    self.logger.debug(
+                        "{}: setting null system property '{}' to {}"
+                        .format(self.node, key, default))
+                    self.node._props[key] = default
+                elif self.node._props.get(key) != val:
+                    self.record_error(
+                        ("Key '{}' is a system property and cannot be updated "
+                         "from '{}' to '{}'")
+                        .format(key, self.node._props.get(key), val),
+                        keys=[key],
+                        type=EntityErrors.INVALID_PERMISSIONS,
+                    )
+            # Otherwise, set the value
+            else:
+                try:
+                    self.node._props[key] = val
+                except Exception as e:  # pylint: disable=broad-except
+                    self.record_error(
+                        'Invalid property ({}): {}'.format(key, str(e)),
+                        keys=[key],
+                        type=EntityErrors.INVALID_PROPERTY,
+                    )
+
+    @property
+    def secondary_keys(self):
+        """Return the tuple of unique dicts for the node."""
+        if self._secondary_keys is None:
+            node = (
+                self.node
+                or self.get_skeleton_node(self.entity_type, self.doc)
+            )
+            if node:
+                self._secondary_keys = node._secondary_keys
+            else:
+                self._secondary_keys = tuple()
+        return self._secondary_keys
+
+    @property
+    def secondary_keys_dicts(self):
+        """Return the list of unique tuples for the node."""
+        node = self.node or self.get_skeleton_node(self.entity_type, self.doc)
+        return [] if not node else node._secondary_keys_dicts
+
+    @property
+    def pg_secondary_keys(self):
+        """Return the list of unique tuples for the node type."""
+        node = self.node or self.get_skeleton_node(self.entity_type, self.doc)
+        return [] if not node else node._pg_secondary_keys
+
+    @staticmethod
+    def is_file(node):
+        """
+        Check if the API should treat this node as a file-like object.
+
+        Args:
+            node (psqlgraph.Node):
+
+        Return:
+            bool: whether node is file-like
+        """
+        is_category_data_file = node._dictionary['category'] == 'data_file'
+        has_file_state = 'file_state' in node.__pg_properties__
+        return is_category_data_file and has_file_state
+
+    @staticmethod
+    def is_updatable_file(node):
+        """
+        Check that a node is a file that can be updated. True if:
+
+        #. The node is a data_file
+        #. It has a file_state in the list of states below
+
+        Args:
+            node (psqlgraph.Node):
+
+        Return:
+            bool: whether the node is an updatable file
+        """
+        allowed_states = [
+            'registered',
+            'uploading',
+            'uploaded',
+            'validating',
+        ]
+        file_state = node._props.get('file_state')
+        return UploadEntity.is_file(node) and file_state in allowed_states
+
     def _merge_doc_links(self, node):
         """
         For all links that exist in the database, add them to the document if
@@ -312,9 +623,12 @@ class UploadEntity(EntityBase):
 
             # Get set of secondary_keys in the link document
             for link in doc_links:
-                target_label = node._pg_links.get(name, {})\
-                                             .get('dst_type', None)\
-                                             .label
+                target_label = (
+                    node._pg_links
+                    .get(name, {})
+                    .get('dst_type', None)
+                    .label
+                )
                 target = self.get_skeleton_node(target_label, link)
                 if target:
                     doc_sk.add(target._secondary_keys)
@@ -330,196 +644,49 @@ class UploadEntity(EntityBase):
             if not self.doc[name]:
                 self.doc.pop(name)
 
-    def _parse_id(self):
-        """Generate and record the entity id.
-
-        :returns: None
-
-        """
-
-        self.entity_id = self.doc.get('id')
-        not_uuid = (
-            self.transaction.role == 'create'
-            and self.entity_id
-            and not REGEX_UUID.match(self.entity_id)
-        )
-        if not_uuid:
-            self.record_error(
-                'Cannot create entity with custom id that is not a UUID.',
-                keys=['id'], type=EntityErrors.INVALID_VALUE
-            )
-
-    def _parse_type(self):
-        """
-        Parse and record the entity type. This type will be used to look up
-        what node class to instantiate.
-
-        Return:
-            None
-        """
-        self.entity_type = self.doc.get('type')
-        if self.entity_type is None:
-            return self.record_error(
-                "missing 'type'", keys=["type"], type=EntityErrors.INVALID_TYPE
-            )
-        self._validate_type()
-
-    def _remove_empty_values(self, doc):
+    @staticmethod
+    def _remove_empty_values(doc):
         for key in doc.keys():
             value = doc[key]
 
             if isinstance(value, dict):
-                self._remove_empty_values(value)
+                UploadEntity._remove_empty_values(value)
             elif hasattr(value, '__iter__'):
-                value = [
-                    sub_doc
-                    for sub_doc in map(self._remove_empty_values, value)
-                    if sub_doc
-                ]
+                sub_docs = map(UploadEntity._remove_empty_values, value)
+                value = [sub_doc for sub_doc in sub_docs if sub_doc]
 
-            is_removed = value == {} or value == [] or value is None
-            if is_removed:
+            if value == {} or value == [] or value is None:
                 doc.pop(key)
 
         return doc
-
-    def _set_node_properties(self):
-        """
-        Take the key, values from the dictionary (minus system keys) and set
-        the value on the instances node, recording any errors.
-        """
-        self.logger.debug('Setting properties on {}'.format(self.node))
-        entry = dictionary.schema.get(self.node.label, {})
-        systemProperties = set(entry.get('systemProperties', []))
-
-        special_keys = ['type', 'id', 'created_datetime', 'updated_datetime']
-        pg_props = self.node.get_pg_properties()
-        prop_keys = (pg_props.keys() + self.node._pg_links.keys()+special_keys)
-        self.node.project_id = self.transaction.project_id
-        default_props = self.get_system_property_defaults()
-
-        # Set properties
-        for key, val in self.doc.iteritems():
-
-            # Does this key exist?
-            if key not in prop_keys:
-                msg = (
-                    "Key '{}' is not a valid property for type '{}'.{}"
-                    .format(
-                        key, self.entity_type, get_suggestion(key, prop_keys)
-                    ),
-                )
-                self.record_error(
-                    msg, keys=[key], type=EntityErrors.INVALID_PROPERTY
-                )
-
-            # Skip type and id
-            elif key in special_keys:
-                pass
-
-            # If key is a link, skip for now
-            elif key in self.node._pg_links.keys():
-                pass
-
-            # Is it a system property?
-            elif key in systemProperties:
-
-                # If the property isn't set on the node, set the default
-                if self.node._props.get(key, None) is None:
-                    default = default_props.get(key, None)
-                    self.logger.debug(
-                        "{}: setting null system property '{}' to {}"
-                        .format(self.node, key, default))
-                    self.node._props[key] = default
-
-                elif self.node._props.get(key) != val:
-                    self.record_error(
-                        ("Key '{}' is a system property and cannot be updated "
-                         "from '{}' to '{}'")
-                        .format(key, self.node._props.get(key), val),
-                        keys=[key],
-                        type=EntityErrors.INVALID_PERMISSIONS,
-                    )
-
-            # Otherwise, set the value
-            else:
-                try:
-                    self.node._props[key] = val
-                except Exception as e:  # pylint: disable=broad-except
-                    self.record_error(
-                        'Invalid property ({}): {}'.format(key, str(e)),
-                        keys=[key],
-                        type=EntityErrors.INVALID_PROPERTY,
-                    )
-
-    def _validate_type(self):
-        """Assert that the requested type is valid and uploadable via the
-        project endpoint.
-
-        """
-        cls = psqlgraph.Node.get_subclass(self.entity_type)
-
-        if not cls:
-            return self.record_error(
-                'Invalid entity type: {}.{}'.format(
-                    self.entity_type, get_suggestion(self.entity_type, [
-                        n.label for n in psqlgraph.Node.get_subclasses()])),
-                keys=['type'],
-                type=EntityErrors.INVALID_TYPE,
-            )
-
-        if 'project_id' not in cls.get_pg_properties():
-            msg = (
-                '{} is not an entity that can be upload via the project'
-                ' endpoint.'
-            )
-            self.record_error(
-                msg.format(cls.label), keys=['id'],
-                type=EntityErrors.INVALID_TYPE
-            )
-
-    def _verify_node_project_id(self, node):
-        """
-        Check if a node is in the project that this entity belongs to.
-
-        Args:
-            node (psqlgraph.Node)
-
-        Return:
-            bool: if existing node belongs to the correct project
-        """
-        return node.project_id == self.transaction.project_id
 
     def flush_to_session(self):
         if not self.node:
             return
 
-        role = self.action
         try:
-            if role == 'create':
+            if self.transaction.role == 'create':
                 # Check if the category for the node is data_file or
                 # metadata_file, in which case, register a uuid and alias in
                 # the index service.
-                cls = psqlgraph.Node.get_subclass(self.entity_type)
-                category = dictionary.schema.get(cls.label)['category']
-                is_data_file = category == 'data_file'
-                is_metadata_file = category == 'metadata_file'
+                is_data_file = self.category == 'data_file'
+                is_metadata_file = self.category == 'metadata_file'
                 if is_data_file or is_metadata_file:
                     project_id = self.transaction.project_id
-                    submitter_id = self.node._props.get("submitter_id")
-                    hashes = {'md5': self.node._props.get("md5sum")}
-                    alias = "{}/{}".format(project_id, submitter_id)
-                    # ``self.transaction.signpost`` is an IndexClient instance
-                    # which supports creation of index and alias records.
+                    submitter_id = self.node._props.get('submitter_id')
+                    hashes = {'md5': self.node._props.get('md5sum')}
+                    alias = '{}/{}'.format(project_id, submitter_id)
                     self.transaction.signpost.create(
-                        did=str(uuid.uuid4()), hashes=hashes, size=self.node._props.get('file_size'), urls=[]
+                        str(uuid.uuid4()), hashes=hashes
                     )
-                    self.transaction.signpost.create_alias(record=alias, hashes=hashes, size=self.node._props.get('file_size'), release='private')
+                    self.transaction.signpost.create_alias(
+                        alias, hashes=hashes
+                    )
                 self.transaction.session.add(self.node)
-            elif role == 'update':
+            elif self.transaction.role == 'update':
                 self.node = self.transaction.session.merge(self.node)
             else:
-                message = 'Uknown role {}'.format(role)
+                message = 'Unknown role {}'.format(self.transaction.role)
                 self.logger.error(message)
                 self.record_error(
                     message, type=EntityErrors.INVALID_PERMISSIONS
@@ -530,8 +697,8 @@ class UploadEntity(EntityBase):
             self.record_error(str(e))
 
     def get_skeleton_node(self, label, properties, project_id=None):
-        """Return a node with just the properties set
-
+        """
+        Return a node with just the properties set.
         """
         # Get node class
         cls = psqlgraph.Node.get_subclass(label)
@@ -554,7 +721,7 @@ class UploadEntity(EntityBase):
                 try:
                     node[key] = val
                 except ValidationError:
-                    # pass for now, this will be noted later
+                    # Pass for now; this will be noted later.
                     pass
 
         return node
@@ -573,12 +740,7 @@ class UploadEntity(EntityBase):
         for key in system_properties:
             if key in ignored_system_property_keys:
                 continue
-            node_props = (
-                psqlgraph.Node
-                .get_subclass(self.entity_type)
-                .__pg_properties__
-            )
-            if key not in node_props:
+            if key not in self.cls.__pg_properties__:
                 self.logger.error(
                     "'{}' has systemProperty '{}' that is not a property"
                     .format(type(self.node), key)
@@ -589,56 +751,12 @@ class UploadEntity(EntityBase):
             prop = entry.get('properties', {}).get(key, {})
             if 'default' in prop:
                 doc[key] = prop['default']
+
         return doc
 
     def get_user_roles(self, user=None):
         user = user or self.transaction.user
         return user.roles.get(self.transaction.project_id, [])
-
-    def instantiate(self):
-
-        if not self.is_valid:
-            return
-
-        # Check that there is an identifier
-        if not (self.entity_id or self.secondary_keys):
-            keys = [a for b in self.pg_secondary_keys for a in b]
-            if not keys:
-                return self.record_error(
-                    ('There are no unique keys defined on type {} except'
-                     ' for the official GDC id.  To upload this entity you'
-                     ' must add a UUID').format(self.entity_type),
-                    keys=['id'],
-                    type=EntityErrors.MISSING_PROPERTY,
-                )
-            else:
-                return self.record_error(
-                    'Either an id or required unique fields ({}) required'
-                    .format(', '.join(list(keys))),
-                    keys=keys,
-                    type=EntityErrors.MISSING_PROPERTY,
-                )
-
-        # Create entity
-        if not self.entity_type:
-            return
-
-        if self.transaction.role == 'create':
-            self.node = self._get_node_create()
-        elif self.transaction.role == 'update':
-            self.node = self._get_node_merge()
-        else:
-            self.record_error(
-                "Unknown role '{}'".format(self.transaction.role),
-                type=EntityErrors.INVALID_PERMISSIONS,
-            )
-            return
-
-        # Stop if the node instantiation failed
-        if not self.node:
-            return
-
-        self._set_node_properties()
 
     def is_case_creation_allowed(self, case_id):
         """
@@ -659,28 +777,6 @@ class UploadEntity(EntityBase):
                 project,
                 self.doc.get('submitter_id')
             )
-
-    def parse(self, doc):
-        """
-        Parse the given doc and set the instance values accordingly.
-
-        Args:
-            doc (dict): the json upload representation
-
-        Return:
-            None
-        """
-        if not isinstance(doc, dict):
-            return self.record_error(
-                'Entity document must be an object, not a {}'
-                .format(doc.__class__.__name__),
-                type=EntityErrors.INVALID_VALUE,
-            )
-
-        self.doc = doc
-        self._parse_type()
-        if self.entity_type and self.is_valid:
-            self._parse_id()
 
     def set_association_proxies(self):
         """
@@ -739,7 +835,6 @@ class UploadEntity(EntityBase):
                         type=EntityErrors.INVALID_LINK,
                     )
                     continue
-
                 # Check for missing links
                 elif len(nodes) == 0:
                     msg = 'No link destination found for {}'.format(name)
@@ -755,7 +850,8 @@ class UploadEntity(EntityBase):
                     # the keys.
 
                     self.record_error(
-                        msg, keys=[name], type=EntityErrors.INVALID_LINK)
+                        msg, keys=[name], type=EntityErrors.INVALID_LINK
+                    )
                     continue
 
                 # Finally, add the target to the association proxy list
@@ -785,6 +881,5 @@ class UploadEntity(EntityBase):
                 elif 'is a required property' in message:
                     error['type'] = EntityErrors.MISSING_PROPERTY
                 elif self.entity_type and error.get('keys'):
-                    cls = psqlgraph.Node.get_subclass(self.entity_type)
-                    if cls and error['keys'][0] in cls._pg_edges:
+                    if self.cls and error['keys'][0] in self.cls._pg_edges:
                         error['type'] = EntityErrors.INVALID_LINK

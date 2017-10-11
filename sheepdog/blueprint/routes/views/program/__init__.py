@@ -2,20 +2,14 @@
 View functions for routes in the blueprint for '/<program>' paths.
 """
 
-import json
 import uuid
 
 import flask
-import sqlalchemy
-import yaml
 
 from sheepdog import auth
-from sheepdog import dictionary
 from sheepdog import models
 from sheepdog import utils
-from sheepdog.blueprint.routes.views.program import project
 from sheepdog.errors import (
-    APINotImplemented,
     AuthError,
     NotFoundError,
     UserError,
@@ -24,9 +18,7 @@ from sheepdog.globals import (
     PERMISSIONS,
     PROJECT_SEED,
     ROLES,
-    STATES_COMITTABLE_DRY_RUN,
 )
-from sheepdog.transactions import upload
 from sheepdog.transactions.upload.entity import UploadEntity
 from sheepdog.transactions.upload.transaction import UploadTransaction
 
@@ -191,14 +183,11 @@ def create_project(program):
         with UploadTransaction(**transaction_args) as trans:
             node = session.merge(node)
             session.commit()
-            entity = UploadEntity(trans)
+            entity = UploadEntity(trans, doc)
             entity.action = action
-            entity.doc = doc
-            entity.entity_type = 'project'
             entity.unique_keys = node._secondary_keys_dicts
             entity.node = node
             entity.entity_id = entity.node.node_id
-            trans.entities = [entity]
             return flask.jsonify(trans.json)
 
 
@@ -242,7 +231,6 @@ def create_files_viewer(dry_run=False):
                 action = 'delete'
         else:
             raise UserError('Unsupported file operation', code=405)
-
 
         project_id = program + '-' + project
         role = PERMISSIONS[action]

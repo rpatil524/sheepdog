@@ -61,13 +61,12 @@ class EntityBase(object):
 
     @property
     def base_json(self):
-        """Returns a json object representation.  This property is intended
-        to be used to produce all server response payloads.
+        """
+        Return a json object representation. This property is intended to be
+        used to produce all server response payloads.
 
         Subclasses sould call and add to this base.
-
         """
-
         return {
             'valid': self.is_valid,
             'action': self.action,
