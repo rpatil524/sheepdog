@@ -43,7 +43,7 @@ setup(
         'git+https://git@github.com/uc-cdis/cdislogging.git@master#egg=cdislogging',
         'git+https://git@github.com/uc-cdis/dictionaryutils.git@1.2.1#egg=dictionaryutils',
         'git+https://git@github.com/uc-cdis/datamodelutils.git@0.2.0#egg=datamodelutils',
-        'git+https://git@github.com/uc-cdis/authutils.git@feat/api-373-separate-authutils#egg=authutils',
+        'git+https://git@github.com/uc-cdis/authutils.git@3aab6180554b3b8765133aac514f6219e8e3499f#egg=authutils',
         'git+https://git@github.com/uc-cdis/indexclient.git@d49134f4626b69a8ef02c189ed0047ad1a635cb0#egg=indexclient',
         'git+https://git@github.com/NCI-GDC/gdcdatamodel.git@1.1.0#egg=gdcdatamodel',
         'git+https://git@github.com/uc-cdis/datadictionary.git@0.1.1#egg=gdcdictionary',
