@@ -168,7 +168,7 @@ class UploadEntity(EntityBase):
         self.logger.debug('Creating new {}'.format(cls.__name__))
         category = dictionary.schema.get(cls.label)['category']
         is_data_file = category == 'data_file'
-        if is_data_file:
+        if category == 'data_file' or category == 'metadata_file':
             if self.entity_id:
                 self.record_error(
                     'Cannot assign ID to file, these are system generated. ',
