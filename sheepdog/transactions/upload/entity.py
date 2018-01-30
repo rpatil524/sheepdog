@@ -178,6 +178,7 @@ class UploadEntity(EntityBase):
             else:
                 self.entity_id = self.get_uuid_from_index()
 
+
         if not self.entity_id:
             self.entity_id = str(uuid.uuid4())
 
@@ -507,8 +508,8 @@ class UploadEntity(EntityBase):
         - If there is already a record matching the hash and size for this
           file, then return none.
         """
-        hashes = {'md5': self.node._props.get('md5sum')}
-        size = self.node._props.get('file_size')
+        hashes = {'md5': self.doc.get('md5sum')}
+        size = self.doc.get('file_size')
         # Check if there is an existing record with this hash and size, i.e.
         # this node already has an index record. 
         params = {'hashes': hashes, 'size': size}
