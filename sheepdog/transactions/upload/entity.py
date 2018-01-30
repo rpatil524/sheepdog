@@ -175,6 +175,8 @@ class UploadEntity(EntityBase):
                     keys=['id'],
                     type=EntityErrors.INVALID_VALUE,
                 )
+            else:
+                self.entity_id = self.get_uuid_from_index()
 
         if not self.entity_id:
             self.entity_id = str(uuid.uuid4())
@@ -494,6 +496,29 @@ class UploadEntity(EntityBase):
     def get_metadata(self):
         metadata = {'acls': flask.g.dbgap_accession_numbers}
         return metadata
+
+    def get_uuid_from_index(self):
+        """
+        Call the "signpost" (index client) for the transaction to see if
+        a record entry already exists for this file.
+
+        NOTE:
+        - Should only ever be called for data and metadata files.
+        - If there is already a record matching the hash and size for this
+          file, then return none.
+        """
+        hashes = {'md5': self.node._props.get('md5sum')}
+        size = self.node._props.get('file_size')
+        # Check if there is an existing record with this hash and size, i.e.
+        # this node already has an index record. 
+        params = {'hashes': hashes, 'size': size}
+        # document: indexclient.Document
+        # if `document` exists, `document.did` is the UUID that is already
+        # registered in indexd for this entity.
+        document = self.transaction.signpost.get_with_params(params)
+        if not document:
+            return None
+        return document.did
 
     def register_index(self):
         """
