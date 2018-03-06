@@ -11,13 +11,13 @@ from cdislogging import get_logger
 
 from authutils import (
     admin_auth,
-    AuthDriver,
     authorize_for_project,
     dbgap,
-    FederatedUser,
     roles,
-    set_global_user,
+    require_admin_auth_header
 )
+from authutils.auth_driver import AuthDriver
+from authutils.federated_user import  FederatedUser
 
 LOGGER = get_logger('sheepdog_auth')
 def _log_import_error(module_name):

@@ -14,7 +14,7 @@ from datamodelutils import models, validators
 
 
 from indexclient.client import IndexClient as SignpostClient
-from userdatamodel.driver import SQLAlchemyDriver
+from fence.resources.database.driver import SQLAlchemyDriver
 
 import sheepdog
 from sheepdog.auth import AuthDriver

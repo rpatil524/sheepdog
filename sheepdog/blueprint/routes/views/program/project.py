@@ -52,8 +52,8 @@ def create_viewer(method, bulk=False, dry_run=False):
         # HCF
         raise RuntimeError('create_bulk_viewer: given invalid method')
 
+    @auth.authorize_for_project(roles=auth_roles)
     @utils.assert_project_exists
-    @auth.authorize_for_project(*auth_roles)
     def create_entities(program, project):
         """
         Create GDC entities.
@@ -77,8 +77,8 @@ def create_viewer(method, bulk=False, dry_run=False):
             transaction_role, program, project, dry_run=dry_run
         )
 
+    @auth.authorize_for_project(roles=auth_roles)
     @utils.assert_project_exists
-    @auth.authorize_for_project(*auth_roles)
     def bulk_create_entities(program, project):
         """
         Handle bulk transaction instead of single transaction; see
@@ -177,8 +177,8 @@ def get_project_dictionary_entry(program, project, entry):
     return get_dictionary_entry(entry)
 
 
+@auth.authorize_for_project(roles=[ROLES['READ']])
 @utils.assert_program_exists
-@auth.authorize_for_project(ROLES['READ'])
 def get_entities_by_id(program, project, entity_id_string):
     """
     Retrieve existing GDC entities by ID.
@@ -223,8 +223,9 @@ def create_delete_entities_viewer(dry_run=False):
     Create a view function for deleting entities.
     """
 
+    @auth.authorize_for_project(
+        roles=[ROLES['DELETE'], ROLES['ADMIN']])
     @utils.assert_project_exists
-    @auth.authorize_for_project(ROLES['DELETE'], ROLES['ADMIN'])
     def delete_entities(program, project, ids, to_delete=None):
         """
         Delete existing GDC entities.
@@ -285,7 +286,7 @@ def create_delete_entities_viewer(dry_run=False):
     return delete_entities
 
 
-@auth.authorize_for_project(ROLES['READ'])
+@auth.authorize_for_project(roles=[ROLES['READ']])
 def export_entities(program, project):
     """
     Return a file with the requested entities as an attachment.
@@ -364,8 +365,8 @@ def create_files_viewer(dry_run=False, reassign=False):
         ROLES['READ'], ROLES['ADMIN'],
     ]
 
+    @auth.authorize_for_project(roles=auth_roles)
     @utils.assert_project_exists
-    @auth.authorize_for_project(*auth_roles)
     def file_operations(program, project, file_uuid):
         """
         Handle molecular file operations.  This will only be available once the
@@ -482,7 +483,7 @@ def create_files_viewer(dry_run=False, reassign=False):
     return file_operations
 
 
-@auth.authorize_for_project(ROLES['READ'])
+@auth.authorize_for_project(roles=[ROLES['READ']])
 def get_manifest(program, project):
     id_string = flask.request.args.get('ids', '').strip()
     if not id_string:
@@ -503,8 +504,8 @@ def get_manifest(program, project):
 
 def create_open_project_viewer(dry_run=False):
 
+    @auth.authorize_for_project(roles=[ROLES['RELEASE']])
     @utils.assert_project_exists
-    @auth.authorize_for_project(ROLES['RELEASE'])
     def open_project(program, project):
         """
         Mark a project ``open``. Opening a project means uploads, deletions, etc.
@@ -530,8 +531,8 @@ def create_release_project_viewer(dry_run=False):
     ``/<program>/<project>/open/_dry_run``.
     """
 
+    @auth.authorize_for_project(roles=[ROLES['RELEASE']])
     @utils.assert_project_exists
-    @auth.authorize_for_project(ROLES['RELEASE'])
     def release_project(program, project):
         """
         Release a project.
@@ -556,8 +557,8 @@ def create_review_project_viewer(dry_run=False):
     :return: TODO
     """
 
+    @auth.authorize_for_project(roles=[ROLES['RELEASE']])
     @utils.assert_project_exists
-    @auth.authorize_for_project(ROLES['RELEASE'])
     def review_project(program, project):
         """
         Mark a project project for review.
@@ -586,8 +587,8 @@ def create_submit_project_viewer(dry_run=False):
     :return: TODO
     """
 
+    @auth.authorize_for_project(roles=[ROLES['RELEASE']])
     @utils.assert_project_exists
-    @auth.authorize_for_project(ROLES['RELEASE'])
     def submit_project(program, project):
         """
         Submit a project.
@@ -671,8 +672,8 @@ def get_project_template(program, project, entity):
     return response
 
 
+@auth.authorize_for_project(roles=[ROLES['UPDATE']])
 @utils.assert_project_exists
-@auth.authorize_for_project(ROLES['UPDATE'])
 def close_transaction(program, project, transaction_id):
     """
     Close a transaction. The transaction is prevented from being committed in
@@ -759,11 +760,12 @@ def resubmit_transaction(transaction_log):
         )
 
 
-@utils.assert_project_exists
 @auth.authorize_for_project(
-    ROLES['CREATE'], ROLES['UPDATE'], ROLES['DELETE'], ROLES['RELEASE'],
-    'review', 'submit'
-)
+    roles=[
+        ROLES['CREATE'], ROLES['UPDATE'], ROLES['DELETE'], ROLES['RELEASE'],
+        'review', 'submit'
+    ])
+@utils.assert_project_exists
 def commit_dry_run_transaction(program, project, transaction_id):
     """
     See documentation for committing a dry run transaction.
@@ -822,8 +824,9 @@ def commit_dry_run_transaction(program, project, transaction_id):
 
 def create_biospecimen_viewer(dry_run=False):
 
+    @auth.authorize_for_project(
+        roles=[ROLES['CREATE'], ROLES['UPDATE']])
     @utils.assert_project_exists
-    @auth.authorize_for_project(ROLES['CREATE'], ROLES['UPDATE'])
     def update_entities_biospecimen_bcr(program, project):
         return transactions.upload.handle_biospecimen_bcr_xml_transaction(
             ROLES['UPDATE'],
@@ -837,8 +840,9 @@ def create_biospecimen_viewer(dry_run=False):
 
 def create_clinical_viewer(dry_run=False):
 
+    @auth.authorize_for_project(
+        roles=[ROLES['CREATE'], ROLES['UPDATE']])
     @utils.assert_project_exists
-    @auth.authorize_for_project(ROLES['CREATE'], ROLES['UPDATE'])
     def update_entities_clinical_bcr(program, project):
         return transactions.upload.handle_clinical_bcr_xml_transaction(
             ROLES['UPDATE'], program, project, dry_run=dry_run

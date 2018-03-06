@@ -66,6 +66,7 @@ def get_programs():
     return flask.jsonify({'links': links})
 
 
+@auth.require_admin_auth_header()
 def root_create():
     """
     /
@@ -107,7 +108,6 @@ def root_create():
             "dbgap_accession_number": "phs000178"
         }
     """
-    auth.admin_auth()
     message = None
     node_id = None
     doc = parse.parse_request_json()

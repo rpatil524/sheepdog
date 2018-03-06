@@ -75,7 +75,8 @@ def put_cgci_blgsp(client, auth=None):
     })
     r = client.put(path, headers=headers, data=data)
     assert r.status_code == 200, r.data
-    del g.user
+    if getattr(g, 'user', False):
+        del g.user
     return r
 
 
@@ -97,7 +98,8 @@ def put_tcga_brca(client, submitter):
     })
     r = client.put('/v0/submission/TCGA/', headers=headers, data=data)
     assert r.status_code == 200, r.data
-    del g.user
+    if getattr(g, 'user', False):
+        del g.user
     return r
 
 

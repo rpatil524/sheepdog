@@ -12,9 +12,9 @@ from flask.testing import make_test_environ_builder
 from fence.jwt.token import generate_signed_access_token
 from psqlgraph import PsqlGraphDriver
 from gdcdatamodel.models import Edge, Node
-from userdatamodel import models as usermd
-from userdatamodel import Base as usermd_base
-from userdatamodel.driver import SQLAlchemyDriver
+from fence import models as usermd
+from fence.models import Base as usermd_base
+from fence.resources.database.driver import SQLAlchemyDriver
 from cdispyutils.hmac4 import get_auth
 from dictionaryutils import DataDictionary, dictionary
 from datamodelutils import models, validators
@@ -210,7 +210,7 @@ def encoded_jwt(private_key, user):
 
     Args:
         private_key (str): private key
-        user (userdatamodel.models.User): user object
+        user (fence.models.User): user object
 
     Return:
         str: JWT containing claims encoded with private key

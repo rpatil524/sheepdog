@@ -91,7 +91,7 @@ def get_projects(program):
     ]
     return flask.jsonify({'links': links})
 
-
+@auth.require_admin_auth_header()
 @utils.assert_program_exists
 def create_project(program):
     """
@@ -134,7 +134,6 @@ def create_project(program):
                 "state": "active"
             }
     """
-    auth.admin_auth()
     doc = utils.parse.parse_request_json()
     if not isinstance(doc, dict):
         raise UserError('Program endpoint only supports single documents')
