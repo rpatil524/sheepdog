@@ -207,7 +207,8 @@ class UploadEntity(EntityBase):
         cls = psqlgraph.Node.get_subclass(self.entity_type)
         self.logger.debug('Creating new {}'.format(cls.__name__))
         category = dictionary.schema.get(cls.label)['category']
-        is_data_file = category == 'data_file'
+        #is_data_file = category == 'data_file'
+        is_data_file = category.endswith('_file')
         if is_data_file:
             if self.entity_id:
                 self.record_error(
