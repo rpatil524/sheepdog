@@ -1,6 +1,7 @@
 import envelopes
 import psqlgraph
 import sqlalchemy
+import socket
 from flask import current_app as capp
 
 from sheepdog import utils
@@ -134,22 +135,22 @@ class SubmissionTransaction(TransactionBase):
         current states to ``submitted``.
         """
         self.assert_project_state()
-        nodes = self.lookup_submittable_nodes()
-        self.entities = [
-            SubmissionEntity(self, n)
-            for n in nodes
-        ]
-        for entity in self.entities:
-            entity.submit()
+        #nodes = self.lookup_submittable_nodes()
+        #self.entities = [
+        #    SubmissionEntity(self, n)
+        #    for n in nodes
+        #]
+        #for entity in self.entities:
+        #    entity.submit()
 
-        project_node = self.session.merge(self.project_node)
-        project_node.state = 'submitted'
-        project_node.releasable = True
+        #project_node = self.session.merge(self.project_node)
+        #project_node.state = 'submitted'
+        #project_node.releasable = True
+        
+        #if self.success and utils.should_send_email(self.app_config):
+        self.send_submission_notification_email()
 
-        if self.success and utils.should_send_email(self.app_config):
-            self.send_submission_notification_email()
-
-        self.commit()
+        #self.commit()
 
     def send_submission_notification_email(self):
         """Sends an email notification
@@ -162,8 +163,10 @@ class SubmissionTransaction(TransactionBase):
         to_addr = self.app_config.get('EMAIL_SUPPORT_ADDRESS')
         preformatted = self.app_config.get('EMAIL_NOTIFICATION_SUBMISSION')
         subject = (
-            "[SUBMISSION] Project {project_id} has been submitted by {user}"
-            .format(project_id=self.project_id, user=self.user.username))
+            "[SUBMISSION] Project {project_id} has been submitted by {user} on {host}"
+            .format(project_id=self.project_id,
+                    user=self.user.username,
+                    host=socket.gethostname()))
 
         number_of_cases = 0
         number_of_submitted_files = 0
