@@ -156,6 +156,7 @@ class UploadTransaction(TransactionBase):
         self.create_links()
         print "Post validating {} secondary keys".format(len(self.valid_entities))
         self.graph_validator.record_errors(self.db_driver, self.valid_entities)
+        print "Finished graph validator"
         self.specify_errors()
 
     def instantiate(self):
