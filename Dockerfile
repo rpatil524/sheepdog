@@ -26,20 +26,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     && python -m pip install --upgrade pip \
     && python -m pip install --upgrade setuptools \
-    && python -m pip install uwsgi \
+    && python -m pip install gunicorn \
     && mkdir /var/www/sheepdog \
     && mkdir -p /var/www/.cache/Python-Eggs/ \
     && chown www-data -R /var/www/.cache/Python-Eggs/ \
     && mkdir /run/nginx/
 
-COPY . /sheepdog
-COPY ./deployment/uwsgi/uwsgi.ini /etc/uwsgi/uwsgi.ini
-COPY ./deployment/nginx/nginx.conf /etc/nginx/
-COPY ./deployment/nginx/uwsgi.conf /etc/nginx/sites-available/
+COPY ./requirements.txt /sheepdog/requirements.txt
 WORKDIR /sheepdog
 
-RUN python -m pip install -r requirements.txt \
-    && COMMIT=`git rev-parse HEAD` && echo "COMMIT=\"${COMMIT}\"" >sheepdog/version_data.py \
+RUN python -m pip install -r requirements.txt
+
+COPY . /sheepdog
+COPY ./deployment/nginx/nginx.conf /etc/nginx/
+COPY ./deployment/nginx/gunicorn.conf /etc/nginx/sites-available/
+
+RUN COMMIT=`git rev-parse HEAD` && echo "COMMIT=\"${COMMIT}\"" >sheepdog/version_data.py \
     && VERSION=`git describe --always --tags` && echo "VERSION=\"${VERSION}\"" >>sheepdog/version_data.py \
     && rm /etc/nginx/sites-enabled/default \
     && ln -s /etc/nginx/sites-available/uwsgi.conf /etc/nginx/sites-enabled/uwsgi.conf \
