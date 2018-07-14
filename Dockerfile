@@ -44,9 +44,9 @@ COPY ./deployment/nginx/gunicorn.conf /etc/nginx/sites-available/
 RUN COMMIT=`git rev-parse HEAD` && echo "COMMIT=\"${COMMIT}\"" >sheepdog/version_data.py \
     && VERSION=`git describe --always --tags` && echo "VERSION=\"${VERSION}\"" >>sheepdog/version_data.py \
     && rm /etc/nginx/sites-enabled/default \
-    && ln -s /etc/nginx/sites-available/uwsgi.conf /etc/nginx/sites-enabled/uwsgi.conf \
-    && ln -sf /dev/stdout /var/log/nginx/access.log \
-    && ln -sf /dev/stderr /var/log/nginx/error.log \
+    && ln -s /etc/nginx/sites-available/gunicorn.conf /etc/nginx/sites-enabled/gunicorn.conf \
+    && ln -sf /proc/1/fd/1 /var/log/nginx/access.log \
+    && ln -sf /proc/1/fd/2 /var/log/nginx/error.log \
     && chown www-data /var/www/sheepdog
 
 EXPOSE 80
