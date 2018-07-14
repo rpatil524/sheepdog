@@ -136,6 +136,7 @@ class UploadTransaction(TransactionBase):
             for entity in self.valid_entities
             if entity.secondary_keys
         )
+        print "Pre validating {} secondary keys".format(len(entities_secondary_keys))
         for secondary_keys in entities_secondary_keys:
             if secondary_keys in checked:
                 self.record_error(
@@ -153,6 +154,7 @@ class UploadTransaction(TransactionBase):
         ``self.pre_validate()``
         """
         self.create_links()
+        print "Post validating {} secondary keys".format(len(self.valid_entities))
         self.graph_validator.record_errors(self.db_driver, self.valid_entities)
         self.specify_errors()
 
