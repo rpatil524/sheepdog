@@ -158,6 +158,7 @@ class UploadTransaction(TransactionBase):
         self.graph_validator.record_errors(self.db_driver, self.valid_entities)
         print "Finished graph validator"
         self.specify_errors()
+        print "Finished specify_errors"
 
     def instantiate(self):
         """Create a SQLAlchemy model for all transaction entities."""

@@ -38,7 +38,9 @@ def single_transaction_worker(transaction, *doc_args):
             transaction.parse_doc(*doc_args)
             transaction.flush()
             transaction.post_validate()
+            print "committing"
             transaction.commit()
+            print "done"
         except UserError as e:
             transaction.record_user_error(e)
             raise
@@ -89,6 +91,7 @@ def _single_transaction(role, program, project, *doc_args, **tx_kwargs):
         )
         return flask.jsonify(response)
     else:
+        print "starting sync"
         response, code = single_transaction_worker(transaction, *doc_args)
         return flask.jsonify(response), code
 
