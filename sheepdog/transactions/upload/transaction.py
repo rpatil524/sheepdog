@@ -363,8 +363,11 @@ class BulkUploadTransaction(TransactionBase):
         self.check_for_duplicates()
         for sub_tx in self.subtransactions:
             sub_tx.post_validate()
+        print "begin empty_subtransactions"
         self.record_errors_for_empty_subtransactions()
+        print "begin empty_transaction"
         self.record_errors_for_empty_transaction()
+        print "finished 1"
 
     def record_errors_for_empty_subtransactions(self):
         """Record transactional_errors for empty subtransactions."""
