@@ -1,6 +1,5 @@
 .. toctree::
 
-    sheepdog.auth
     sheepdog.blueprint
     sheepdog.dictionary
     sheepdog.errors

@@ -20,7 +20,6 @@ from indexd.auth.drivers.alchemy import SQLAlchemyAuthDriver
 from psqlgraph import PsqlGraphDriver
 from userdatamodel.driver import SQLAlchemyDriver
 
-from sheepdog.auth import AuthDriver
 from sheepdog.errors import APIError, setup_default_handlers, UnhealthyCheck
 from sheepdog.version_data import VERSION, COMMIT
 from sheepdog.globals import (
@@ -62,11 +61,6 @@ def db_init(app):
         app.config['SIGNPOST']['host'],
         version=app.config['SIGNPOST']['version'],
         auth=app.config['SIGNPOST']['auth'])
-    try:
-        app.logger.info('Initializing Auth driver')
-        app.auth = AuthDriver(app.config["AUTH_ADMIN_CREDS"], app.config["INTERNAL_AUTH"])
-    except Exception:
-        app.logger.exception("Couldn't initialize auth, continuing anyway")
 
 
 def app_init(app):

@@ -11,10 +11,8 @@ from cdislogging import get_logger
 
 from authutils import (
     admin_auth,
-    AuthDriver,
     authorize_for_project,
     dbgap,
-    FederatedUser,
     roles,
     set_global_user,
 )

@@ -90,21 +90,6 @@ def run_with_fake_auth():
         return project_ids
 
     with patch(
-            'sheepdog.api.AuthDriver',
-            spec=True
-    ) as _,patch(
-        'sheepdog.auth.FederatedUser.roles',
-        new_callable=PropertyMock,
-        return_value=roles,
-    ), patch(
-        'sheepdog.auth.FederatedUser.logged_in',
-        new_callable=PropertyMock,
-        return_value=lambda: True,
-    ), patch(
-        'sheepdog.auth.FederatedUser.get_project_ids',
-        new_callable=PropertyMock,
-        return_value=get_project_ids,
-    ), patch(
         'sheepdog.auth.verify_hmac',
         new=set_user,
     ):
