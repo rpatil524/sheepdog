@@ -91,6 +91,11 @@ OAUTH2 = {
     }
 }
 
+# option to force authutils to prioritize USER_API setting over the issuer from
+# token when redirecting, used during local docker compose setup when the
+# services are on different containers but the hostname is still localhost
+FORCE_ISSUER = False
+
 SESSION_COOKIE_NAME = 'sheepdog_session'
 # verify project existence in dbgap or not
 VERIFY_PROJECT = False
