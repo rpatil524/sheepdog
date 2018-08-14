@@ -135,6 +135,7 @@ class SubmissionTransaction(TransactionBase):
         current states to ``submitted``.
         """
         self.assert_project_state()
+        self.entities = None
         #nodes = self.lookup_submittable_nodes()
         #self.entities = [
         #    SubmissionEntity(self, n)
@@ -180,6 +181,14 @@ class SubmissionTransaction(TransactionBase):
                 if ex_strategy:
                     experimental_strategies.add(ex_strategy)
 
+        if not self.entities:
+            nodes = self.lookup_submittable_nodes()
+            submittable_entities = [
+                SubmissionEntity(self, n)
+                for n in nodes
+            ]
+        else:
+            submittable_entities = self.entities
 
         # Construct body
         text_body = preformatted.format(
@@ -188,6 +197,7 @@ class SubmissionTransaction(TransactionBase):
             number_of_cases=number_of_cases,
             number_of_submitted_files=number_of_submitted_files,
             experimental_strategies=','.join(experimental_strategies),
+            submitted_nodes='\n'.join(submittable_entites)
         )
 
         # Construct email
