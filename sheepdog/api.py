@@ -1,18 +1,16 @@
 import os
 import sys
 
-from flask import Flask, jsonify
-from psqlgraph import PsqlGraphDriver
-
 from authutils.oauth2 import client as oauth2_client
 from authutils.oauth2.client import blueprint as oauth2_blueprint
 from authutils import AuthError
 from cdispyutils.log import get_handler
 from dictionaryutils import DataDictionary, dictionary
 from datamodelutils import models, validators, postgres_admin
-
-
+from flask import Flask, jsonify
 from indexclient.client import IndexClient as SignpostClient
+from psqlgraph import PsqlGraphDriver
+from werkzeug.contrib.profiler import ProfilerMiddleware
 
 import sheepdog
 from sheepdog.errors import APIError, setup_default_handlers, UnhealthyCheck
@@ -138,6 +136,17 @@ def app_init(app):
             'Secret key not set in config! Authentication will not work'
         )
 
+    profiling_output = app.config.get('PROFILING_OUTPUT')
+    if profiling_output:
+        root_dir = os.path.dirname(os.path.realpath(__file__))
+        profiling_dir = os.path.join(root_dir, profiling_output)
+        # Create directory if necessary
+        if not os.path.exists(profiling_dir):
+            os.makedirs(profiling_dir, mode=0o664)
+        app.wsgi_app = ProfilerMiddleware(
+            app.wsgi_app, profile_dir=profiling_output
+        )
+
 
 app = Flask(__name__)
 
@@ -197,10 +206,6 @@ def _log_and_jsonify_exception(e):
 
 
 app.register_error_handler(APIError, _log_and_jsonify_exception)
-
-app.register_error_handler(
-    sheepdog.errors.APIError, _log_and_jsonify_exception
-)
 app.register_error_handler(AuthError, _log_and_jsonify_exception)
 
 
