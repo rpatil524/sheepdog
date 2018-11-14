@@ -40,7 +40,8 @@ before_script:
 
 # command to run tests
 script:
-- py.test -vv --cov=sheepdog --cov-report xml tests/ -k 'test_create_file_no_required_index or test_tsv_submission_handle_array_type'
+- py.test -vv --cov=sheepdog --cov-report xml tests/ --ignore=tests/integration/datadictwithobjid/
+- py.test -vv --cov=sheepdog --cov-report xml tests/integration/datadictwithobjid/
 
 after_script:
 - python-codacy-coverage -r coverage.xml

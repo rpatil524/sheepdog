@@ -77,6 +77,7 @@ def wait_for_indexd_not_alive(port):
 @pytest.fixture
 def app(tmpdir, request):
 
+    dictionary_setup(_app)
     port = 8000
     # this is to make sure sqlite is initialized
     # for every unit test
@@ -114,7 +115,6 @@ def app(tmpdir, request):
     request.addfinalizer(teardown)
 
     app_init(_app)
-    dictionary_setup(_app)
 
     _app.logger.setLevel(os.environ.get("GDC_LOG_LEVEL", "WARNING"))
 
@@ -175,11 +175,4 @@ def dictionary_setup(_app):
         from gdcdatamodel import validators as vd
         models.init(md)
         validators.init(vd)
-        sheepdog_blueprint = sheepdog.create_blueprint(
-            'submission'
-        )
 
-        try:
-            _app.register_blueprint(sheepdog_blueprint, url_prefix='/v0/submission')
-        except AssertionError:
-            _app.logger.info('Blueprint is already registered!!!')
