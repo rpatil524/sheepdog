@@ -53,5 +53,5 @@ EXPOSE 80
 
 WORKDIR /var/www/sheepdog
 
-ENTRYPOINT [ "/bin/sh", "/peregrine/dockerrun.sh" ]
+ENTRYPOINT [ "/bin/sh", "/sheepdog/dockerrun.sh" ]
 CMD []
