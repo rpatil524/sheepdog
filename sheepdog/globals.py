@@ -219,6 +219,7 @@ UPDATABLE_FILE_STATES = [
     'uploading',
     'uploaded',
     'validating',
+    'validated',    # NOTE: just using this for internal ONLY, do not merge
     'error',
 ]
 
