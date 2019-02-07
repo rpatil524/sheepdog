@@ -103,7 +103,7 @@ def create_project(program):
     Args:
         program (str): |program_id|
         body (schema_project): input body
-    
+
     Responses:
         200: Registered successfully.
         400: User error.
@@ -209,6 +209,8 @@ def create_project(program):
             entity.node = node
             entity.entity_id = entity.node.node_id
             trans.entities = [entity]
+            trans.flush()
+            trans.commit()
             return flask.jsonify(trans.json)
 
 
@@ -220,13 +222,13 @@ def delete_program(program):
 
     Summary:
         Delete a program
-        
+
     Tags:
         program
 
     Args:
         program (str): |program_id|
-    
+
     Responses:
         204: Success.
         400: User error.
