@@ -4,6 +4,7 @@ from.
 """
 
 from contextlib import contextmanager
+import signal
 
 import flask
 from flask import current_app
@@ -223,19 +224,33 @@ class TransactionBase(object):
             raise UserError(msg.format(state, flask.request.path, states))
 
     def __enter__(self):
-        """Called when entering a transaction context.
+        """
+        Called when entering a transaction context.
 
         This method sets:
         - transaction_log
-
         """
+        # this handler must be restored when cleaning up
+        self._sighup_handler_prv = signal.getsignal(signal.SIGHUP)
         self.logger.info("Entering {}".format(self))
         self.claim_transaction_log()
-
         return self
 
+    def _restore_sighup(self):
+        # restore the old SIGHUP handler which is caught during transaction
+        signal.signal(signal.SIGHUP, self._sighup_handler_prv)
+
+    def _handle_sighup(self):
+        self.rollback()
+        self.logger.error("received SIGHUP")
+        self.set_transaction_log_state(TX_LOG_STATE_ERRORED)
+        self.write_transaction_log()
+        self.commit()
+        self._restore_sighup()
+
     def __exit__(self, exc_type, exc_value, traceback):
-        """Called when exiting a transaction context.
+        """
+        Called when exiting a transaction context.
 
         This method will always rollback any uncommitted changes in
         the session to avoid them being committed as the session scope
@@ -244,10 +259,9 @@ class TransactionBase(object):
         Because this function always rollsback, the programmer should
         be sure to call self.session.commit() when they are confident
         they are writing a valid transaction to the database.
-
         """
-
         self.rollback()
+        self._restore_sighup()
 
     def claim_transaction_log(self):
         """Creates a new, default transaction log and writes it to the
