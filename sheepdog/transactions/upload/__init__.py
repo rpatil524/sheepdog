@@ -9,6 +9,7 @@ import uuid
 
 import flask
 import lxml
+import time
 
 from sheepdog import auth
 from sheepdog import utils
@@ -25,13 +26,25 @@ def single_transaction_worker(transaction, *doc_args):
     """
     Execute single transaction (called in serial or async).
     """
+    start = [time.time()]
+
+    def stamp(tag):
+        now = time.time()
+        flask.current_app.logger.critical('>>>>>>>>>>>> %s %.3f', tag, now - start[0])
+        start[0] = now
+
     session = transaction.db_driver.session_scope(can_inherit=False)
     with session, transaction:
         try:
+            stamp('tx started   ')
             transaction.parse_doc(*doc_args)
+            stamp('parse_doc    ')
             transaction.flush()
+            stamp('flush        ')
             transaction.post_validate()
+            stamp('post_validate')
             transaction.commit()
+            stamp('commit       ')
         except HandledIntegrityError:
             pass
         except UserError as e:
@@ -42,6 +55,7 @@ def single_transaction_worker(transaction, *doc_args):
         finally:
             response = transaction.json
             code = transaction.status_code
+    stamp('final steps  ')
     return response, code
 
 
