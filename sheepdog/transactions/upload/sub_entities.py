@@ -301,8 +301,8 @@ class FileUploadEntity(UploadEntity):
         if utils.is_project_public(project):
             acl = ["*"]
         else:
-            self.logger.warn('acl: {}'.format(acl))
             acl = self.transaction.get_phsids()
+            self.logger.warn('acl: {}'.format(acl))
 
         urls = []
         if self.urls:

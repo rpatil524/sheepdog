@@ -507,6 +507,7 @@ def is_node_file(node):
 def is_project_public(project):
     if not hasattr(models.Project, "availability_type"):
         return False
+    flask.current_app.logger.info('project.availability_type: {}'.format(project.availability_type))
     return project.availability_type == "Open"
 
 
