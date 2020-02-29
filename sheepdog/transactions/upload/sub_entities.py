@@ -301,6 +301,7 @@ class FileUploadEntity(UploadEntity):
         if utils.is_project_public(project):
             acl = ["*"]
         else:
+            self.logger.warn('acl: {}'.format(acl))
             acl = self.transaction.get_phsids()
 
         urls = []
@@ -318,11 +319,13 @@ class FileUploadEntity(UploadEntity):
             .get("properties", {})
             .get("consent_codes")
         )
+        self.logger.info('use_consent_codes: {}'.format(use_consent_codes))
         if use_consent_codes:
             consent_codes = self.node._props.get("consent_codes")
             if consent_codes:
                 authz.extend("/consents/" + code for code in consent_codes)
-
+        self.logger.info('authz: {}'.format(authz))
+        
         # IndexClient
         doc = self._create_index(
             did=self.file_index,
